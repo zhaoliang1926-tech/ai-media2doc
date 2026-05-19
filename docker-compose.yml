@@ -1,0 +1,18 @@
+services:
+  ai-media2doc:
+    build: .
+    container_name: ai-media2doc
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ./tmp:/app/tmp
+      - ./config:/app/config
+      - ./logs:/app/logs
+    environment:
+      - TZ=Asia/Shanghai
+      - ENABLE_CLAUDE_CLI=false   # NAS 上无法运行 Claude CLI，仅保留 API 改写
+
+    # 共享宿主机网络，容器直接走 NAS 的路由表
+    # 双网卡：LAN1(华为/国内) + LAN2(华硕/外网)，国内服务走 LAN1，无需额外配置
+    network_mode: host

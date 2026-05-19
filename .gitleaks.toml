@@ -1,0 +1,28 @@
+# AI-Media2Doc · gitleaks 配置（liangge release-cli + 本地 dry-run 共用）
+# paths 不加 ^ anchor，substring 匹配兼容相对路径（cwd=source）和绝对路径
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "AI-Media2Doc 运行时产物 + 私有配置"
+
+paths = [
+    # 运行时产物
+    "logs/",
+    "tmp/",
+    "data/",
+    "external/",
+    "\\.git/",
+    "\\.claude/",
+    "__pycache__/",
+    # 私有配置
+    "\\.env$",
+    "\\.env\\.backup-",
+    "\\.env\\.example",
+    "config/douyin_cookies\\.txt$",
+    "config/xhs_cookies\\.txt$",
+    # 缓存 / 系统
+    "\\.DS_Store$",
+    "node_modules/",
+]

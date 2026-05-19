@@ -1,0 +1,30 @@
+.env
+tmp/
+logs/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.DS_Store
+.venv/
+venv/
+dist/
+build/
+
+# 外部依赖底层引擎（GPL 项目，独立 git，不被超级 git 跟踪）
+external/
+
+# 敏感凭证（绝不入 git）
+.env.backup-*
+config/douyin_cookies.txt
+config/xhs_cookies.txt
+
+# 历史处理产物
+data/
+
+# Claude Code worktrees
+.claude/
+
+# Workspace dotfiles
+*.iml
+.idea/
+.vscode/

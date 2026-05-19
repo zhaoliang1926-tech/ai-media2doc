@@ -1,0 +1,70 @@
+{
+  "project": "ai-media2doc",
+  "github_repo": "zhaoliang1926-tech/ai-media2doc",
+  "install_path_default": "~/ai-media2doc",
+  "include": [
+    "src/**",
+    "scripts/**",
+    "ops/**",
+    "docs/**",
+    "tests/**",
+    "config/discover.yaml",
+    "config/prompts.yaml",
+    ".env.example",
+    "README.md",
+    "Dockerfile",
+    "docker-compose.yml",
+    "requirements.txt",
+    "claude_server.py",
+    "poller.py",
+    ".release-manifest.json",
+    ".gitignore",
+    ".gitleaks.toml"
+  ],
+  "exclude": [
+    ".env",
+    ".env.backup-*",
+    "config/douyin_cookies.txt",
+    "config/xhs_cookies.txt",
+    "data/**",
+    "tmp/**",
+    "logs/**",
+    "__pycache__/**",
+    "**/__pycache__/**",
+    "*.pyc",
+    ".git/**",
+    ".DS_Store",
+    ".claude/**",
+    "external/**",
+    "dist/**",
+    "build/**"
+  ],
+  "preserve": [
+    ".env",
+    ".env.local",
+    "data/**",
+    "logs/**",
+    "tmp/**",
+    "config/douyin_cookies.txt",
+    "config/xhs_cookies.txt"
+  ],
+  "secret_patterns": [
+    "sk-[a-zA-Z0-9]{32,}",
+    "sk-ant-[a-zA-Z0-9_-]{90,}",
+    "ghp_[a-zA-Z0-9]{36}",
+    "github_pat_[a-zA-Z0-9_]{82}",
+    "AKIA[0-9A-Z]{16}",
+    "AIza[0-9A-Za-z_-]{35}",
+    "-----BEGIN (RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----"
+  ],
+  "dependencies": {
+    "system": {
+      "python3": ">=3.10",
+      "ffmpeg": ">=4"
+    }
+  },
+  "post_install": [
+    "pip3 install -r requirements.txt --quiet || pip3 install -r requirements.txt --break-system-packages --quiet"
+  ],
+  "risk_level": "low"
+}

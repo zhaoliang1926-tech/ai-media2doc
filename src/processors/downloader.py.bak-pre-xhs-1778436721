@@ -1,0 +1,266 @@
+import asyncio
+import os
+import re
+import subprocess
+from dataclasses import dataclass
+from typing import Optional
+
+from src.utils.logger import logger
+from src.utils.helper import ensure_tmp_dir
+
+try:
+    from core.api_client import DouyinAPIClient
+    _DOUYIN_DOWNLOADER_AVAILABLE = True
+except Exception as _e:
+    _DOUYIN_DOWNLOADER_AVAILABLE = False
+
+
+@dataclass
+class VideoMeta:
+    title: str = ""
+    author: str = ""
+    like_count: Optional[int] = None
+    collect_count: Optional[int] = None
+    share_count: Optional[int] = None
+    comment_count: Optional[int] = None
+    duration: Optional[int] = None
+    upload_date: str = ""
+    url: str = ""
+    audio_path: str = ""
+
+
+# ──────────────────────────────────────────────
+# cookies 加载
+# ──────────────────────────────────────────────
+
+def _load_cookies() -> dict:
+    """从环境变量加载抖音 cookies，返回 key-value 字典。"""
+    cookies_file = os.getenv("DOUYIN_COOKIES_FILE", "").strip()
+    browser = os.getenv("DOUYIN_COOKIES_BROWSER", "").strip().lower()
+
+    if cookies_file:
+        if not os.path.exists(cookies_file):
+            raise RuntimeError(f"DOUYIN_COOKIES_FILE 不存在：{cookies_file}")
+        return _parse_netscape_cookies(cookies_file)
+
+    if browser:
+        logger.info(f"从浏览器读取 cookies：{browser}")
+        return _extract_browser_cookies(browser)
+
+    raise RuntimeError(
+        "未配置抖音 cookies，请在 .env 中设置：\n"
+        "  DOUYIN_COOKIES_FILE=/path/to/cookies.txt  （推荐 Docker 环境）\n"
+        "  DOUYIN_COOKIES_BROWSER=chrome              （推荐本地开发）"
+    )
+
+
+def _parse_netscape_cookies(filepath: str) -> dict:
+    """解析 Netscape 格式 cookies.txt → {name: value}，只保留抖音域名。"""
+    cookies = {}
+    with open(filepath, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split("\t")
+            if len(parts) >= 7:
+                domain, _, _, _, _, name, value = parts[:7]
+                if "douyin" in domain or "iesdouyin" in domain:
+                    cookies[name] = value
+    return cookies
+
+
+def _extract_browser_cookies(browser: str) -> dict:
+    """从浏览器提取抖音 cookies（依赖 yt_dlp.cookies）。"""
+    try:
+        import yt_dlp.cookies as yc
+        jar = yc.extract_cookies_from_browser(browser)
+        return {
+            c.name: c.value
+            for c in jar
+            if "douyin" in c.domain or "iesdouyin" in c.domain
+        }
+    except Exception as e:
+        raise RuntimeError(f"从 {browser} 读取 cookies 失败：{e}") from e
+
+
+# ──────────────────────────────────────────────
+# 核心下载逻辑
+# ──────────────────────────────────────────────
+
+async def _download_async(url: str, tmp_dir: str) -> VideoMeta:
+    """异步下载抖音视频，提取音频，返回 VideoMeta。"""
+    cookies = _load_cookies()
+
+    # 验证必要 cookies
+    missing = [k for k in ("ttwid", "odin_tt", "passport_csrf_token") if k not in cookies]
+    if missing:
+        raise RuntimeError(
+            f"cookies 缺少必要字段：{', '.join(missing)}。\n"
+            "请确认已在浏览器中登录抖音后再重新导出 cookies。"
+        )
+
+    api_client = DouyinAPIClient(cookies)
+
+    # 从 URL 提取 aweme_id
+    aweme_id = _extract_aweme_id(url)
+    if not aweme_id:
+        raise RuntimeError(f"无法从链接中提取视频 ID：{url}")
+
+    logger.info(f"开始获取视频信息：{aweme_id}")
+    aweme_data = await api_client.get_video_detail(aweme_id)
+    if not aweme_data:
+        raise RuntimeError(
+            f"获取视频详情失败（aweme_id={aweme_id}），"
+            "可能是 cookies 过期或视频不存在。"
+        )
+
+    # 提取元数据（存规范化长链接，便于去重）
+    canonical_url = f"https://www.douyin.com/video/{aweme_id}"
+    meta = VideoMeta(url=canonical_url)
+    meta.title = (aweme_data.get("desc") or "").strip() or "无标题"
+    author = aweme_data.get("author") or {}
+    meta.author = author.get("nickname", "")
+    meta.duration = aweme_data.get("duration") or aweme_data.get("video", {}).get("duration")
+    create_time = aweme_data.get("create_time")
+    if create_time:
+        from datetime import datetime
+        meta.upload_date = datetime.fromtimestamp(create_time).strftime("%Y%m%d")
+    stats = aweme_data.get("statistics") or {}
+    meta.like_count = stats.get("digg_count")
+    meta.collect_count = stats.get("collect_count")
+    meta.share_count = stats.get("share_count")
+    meta.comment_count = stats.get("comment_count")
+
+    # 获取视频下载 URL
+    video_url, headers = _extract_video_url(aweme_data, api_client)
+    if not video_url:
+        raise RuntimeError(f"无法提取视频下载链接（aweme_id={aweme_id}）")
+
+    # 下载 mp4 到临时目录
+    video_path = os.path.join(tmp_dir, f"{aweme_id}.mp4")
+    logger.info(f"下载视频文件：{aweme_id}")
+    import aiohttp as _aiohttp
+    # 显式注入 Cookie 头，兼容 CDN 域名与 API 域名不同导致 session cookie 不跟随的问题
+    cookie_str = "; ".join(f"{k}={v}" for k, v in cookies.items())
+    download_headers = {**headers, "Cookie": cookie_str}
+    session = await api_client.get_session()
+    try:
+        async with session.get(video_url, headers=download_headers, timeout=_aiohttp.ClientTimeout(total=300)) as resp:
+            if resp.status != 200:
+                raise RuntimeError(f"视频下载失败，HTTP {resp.status}")
+            with open(video_path, "wb") as f:
+                async for chunk in resp.content.iter_chunked(65536):
+                    f.write(chunk)
+    finally:
+        if session and not session.closed:
+            await session.close()
+
+    # 用 ffmpeg 提取音频
+    audio_path = os.path.join(tmp_dir, f"{aweme_id}.mp3")
+    _extract_audio(video_path, audio_path)
+    os.remove(video_path)
+
+    meta.audio_path = audio_path
+    logger.info(f"下载完成：{meta.title}，音频：{audio_path}")
+    return meta
+
+
+def _resolve_short_url(url: str) -> str:
+    """解析短链接（v.douyin.com）跳转到真实 URL。"""
+    import urllib.request
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.url
+    except Exception:
+        return url
+
+
+def _extract_aweme_id(url: str) -> Optional[str]:
+    if "v.douyin.com" in url or "douyin.com/b/" in url:
+        url = _resolve_short_url(url)
+        logger.info(f"短链接解析为：{url}")
+    match = re.search(r'/video/(\d+)', url)
+    if match:
+        return match.group(1)
+    match = re.search(r'modal_id=(\d+)', url)
+    return match.group(1) if match else None
+
+
+def _extract_video_url(aweme_data: dict, api_client) -> tuple:
+    """从 aweme_data 提取无水印视频 URL 和请求头。"""
+    video = aweme_data.get("video") or {}
+    play_addr = video.get("play_addr") or {}
+    url_list = [u for u in (play_addr.get("url_list") or []) if u]
+    url_list.sort(key=lambda u: 0 if "watermark=0" in u else 1)
+
+    ua = api_client.headers.get("User-Agent", "")
+    default_headers = {
+        "User-Agent": ua,
+        "Referer": "https://www.douyin.com/",
+        "Accept": "*/*",
+    }
+
+    for candidate in url_list:
+        from urllib.parse import urlparse
+        if urlparse(candidate).netloc.endswith("douyin.com"):
+            if "X-Bogus=" not in candidate:
+                signed_url, signed_ua = api_client.sign_url(candidate)
+                return signed_url, {**default_headers, "User-Agent": signed_ua}
+            return candidate, default_headers
+        # CDN 直链可直接用
+        return candidate, default_headers
+
+    # 备用：通过 /aweme/v1/play/ 构建
+    uri = play_addr.get("uri") or video.get("vid")
+    if uri:
+        params = {
+            "video_id": uri,
+            "ratio": "1080p",
+            "line": "0",
+            "is_play_url": "1",
+            "watermark": "0",
+        }
+        signed_url, signed_ua = api_client.build_signed_path("/aweme/v1/play/", params)
+        return signed_url, {**default_headers, "User-Agent": signed_ua}
+
+    return None, {}
+
+
+def _extract_audio(video_path: str, audio_path: str):
+    """用 ffmpeg 从视频提取 MP3 音频。"""
+    cmd = [
+        "ffmpeg", "-y", "-i", video_path,
+        "-vn",
+        "-ac", "1",          # 单声道（Paraformer 要求）
+        "-ar", "16000",      # 16kHz 采样率（Paraformer 标准）
+        "-acodec", "libmp3lame", "-ab", "128k",
+        audio_path
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg 提取音频失败：{result.stderr[-500:]}")
+
+
+# ──────────────────────────────────────────────
+# 公共接口
+# ──────────────────────────────────────────────
+
+def download(url: str) -> VideoMeta:
+    if not _DOUYIN_DOWNLOADER_AVAILABLE:
+        raise RuntimeError(
+            "douyin-downloader 未安装，请运行：\n"
+            "  pip install douyin-downloader"
+        )
+    tmp_dir = ensure_tmp_dir()
+    return asyncio.run(_download_async(url, tmp_dir))
+
+
+def download_from_file(file_path: str) -> VideoMeta:
+    logger.info(f"使用本地文件：{file_path}")
+    # 统一转换为单声道 16kHz MP3，满足 Paraformer 要求
+    audio_path = os.path.splitext(file_path)[0] + "_mono.mp3"
+    _extract_audio(file_path, audio_path)
+    meta = VideoMeta(audio_path=audio_path)
+    return meta
