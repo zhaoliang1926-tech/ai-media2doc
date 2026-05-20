@@ -367,9 +367,36 @@ def on_card_action(data: P2CardActionTrigger) -> P2CardActionTriggerResponse:
         })
 
 
+def _is_placeholder(v: str) -> bool:
+    """空 / 占位值识别：.env 没填时 .env.example 标准占位是 cli_xxxxxxxxxxxxxxxxx 等"""
+    if not v:
+        return True
+    v = v.strip()
+    if not v:
+        return True
+    if v.startswith("<"):
+        return True
+    if "xxxxxxxxxxxxxxxx" in v:
+        return True
+    return False
+
+
 def main():
     logger.info("启动 AI-Media2Doc 服务...")
     logger.info(f"飞书 App ID：{APP_ID}")
+
+    # graceful fallback：占位 / 空凭证不进 ws.start（避免死循环 pm2 unstable restart）
+    # 朋友填好 .env 后 `pm2 restart ai-media2doc-main` 立即激活
+    if _is_placeholder(APP_ID) or _is_placeholder(APP_SECRET):
+        logger.warning("=" * 60)
+        logger.warning("FEISHU_APP_ID / FEISHU_APP_SECRET 未填（.env 占位值）")
+        logger.warning("Daemon 保持 online 但不连飞书 WebSocket")
+        logger.warning("填好 .env 后: pm2 restart ai-media2doc-main 即激活")
+        logger.warning("=" * 60)
+        import time
+        while True:
+            time.sleep(60)
+
     event_handler = (
         lark.EventDispatcherHandler.builder("", "")
         .register_p2_im_message_receive_v1(on_message)
