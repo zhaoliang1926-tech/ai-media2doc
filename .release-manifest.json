@@ -66,5 +66,12 @@
   "post_install": [
     "pip3 install -r requirements.txt --quiet || pip3 install -r requirements.txt --break-system-packages --quiet"
   ],
+  "health_check": {
+    "type": "pm2",
+    "pm2_app": "ai-media2doc-main",
+    "wait_seconds": 30,
+    "stability_window_seconds": 15,
+    "max_unstable_restarts": 0
+  },
   "risk_level": "low"
 }
