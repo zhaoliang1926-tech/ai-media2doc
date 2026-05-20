@@ -1,5 +1,6 @@
 import sys
 import os
+from pathlib import Path
 from loguru import logger
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -11,7 +12,11 @@ logger.add(
     format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level:<8}</level> | <cyan>{name}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
     colorize=True,
 )
-_log_dir = os.getenv("LOG_DIR", "/app/logs")
+# 默认走项目根/logs；Docker 里通过 env LOG_DIR=/app/logs 覆盖
+_log_dir = os.getenv(
+    "LOG_DIR",
+    str(Path(__file__).resolve().parents[2] / "logs"),
+)
 os.makedirs(_log_dir, exist_ok=True)
 logger.add(
     os.path.join(_log_dir, "app.log"),

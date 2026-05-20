@@ -13,7 +13,8 @@ from pathlib import Path
 
 from src.utils.logger import logger
 
-DB_PATH = Path("/Users/zhaoliang/Documents/GitHub/AI-Media2Doc/data/discover/dedupe.db")
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+DB_PATH = PROJECT_ROOT / "data" / "discover" / "dedupe.db"
 
 
 def _get_conn() -> sqlite3.Connection:

@@ -20,10 +20,12 @@
 
 set -euo pipefail
 
-PROJECT_ROOT="/Users/zhaoliang/Documents/GitHub/AI-Media2Doc"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 MC_DIR="${PROJECT_ROOT}/external/MediaCrawler"
-MC_PY="/Users/zhaoliang/.venvs/media-crawler/bin/python"
+MC_PY="${MEDIACRAWLER_PY:-$HOME/.venvs/media-crawler/bin/python}"
 BASE_CFG="${MC_DIR}/config/base_config.py"
+export BASE_CFG
 
 # 1. 健康检查
 if [[ ! -d "${MC_DIR}" ]]; then
@@ -55,11 +57,12 @@ restore() {
 trap restore EXIT INT TERM
 
 python3 - <<'PYPATCH'
+import os
 import re
 import sys
 from pathlib import Path
 
-cfg = Path("/Users/zhaoliang/Documents/GitHub/AI-Media2Doc/external/MediaCrawler/config/base_config.py")
+cfg = Path(os.environ["BASE_CFG"])
 src = cfg.read_text()
 
 updates = {

@@ -5,11 +5,13 @@
 # Idempotent and safe: never overwrites with a bad token.
 set -uo pipefail
 
-PROJECT_DIR="/Users/zhaoliang/Documents/GitHub/AI-Media2Doc"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="$PROJECT_DIR/.env"
 LOG_FILE="$PROJECT_DIR/logs/token-refresh.log"
 
-export PATH="/opt/homebrew/bin:/usr/local/bin:/Users/zhaoliang/.npm-global/bin:/usr/bin:/bin"
+# 兼容 Apple Silicon (/opt/homebrew)、Intel Mac (/usr/local) 和 Linux
+export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.npm-global/bin:$PATH"
 
 mkdir -p "$(dirname "$LOG_FILE")"
 exec >>"$LOG_FILE" 2>&1

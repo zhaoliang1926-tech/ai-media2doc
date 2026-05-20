@@ -31,12 +31,18 @@ from src.utils.logger import logger
 # ────────────────────────────────────────────────
 # 路径常量
 # ────────────────────────────────────────────────
-PROJECT_ROOT = Path("/Users/zhaoliang/Documents/GitHub/AI-Media2Doc")
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 MEDIACRAWLER_DIR = PROJECT_ROOT / "external" / "MediaCrawler"
-MEDIACRAWLER_PY = Path("/Users/zhaoliang/.venvs/media-crawler/bin/python")
+MEDIACRAWLER_PY = Path(os.environ.get(
+    "MEDIACRAWLER_PY",
+    str(Path.home() / ".venvs" / "media-crawler" / "bin" / "python"),
+))
 MEDIACRAWLER_DATA = MEDIACRAWLER_DIR / "data"
 
-DY_CLI = "/Users/zhaoliang/.venvs/dy-cli/bin/dy"
+DY_CLI = os.environ.get(
+    "DY_CLI",
+    str(Path.home() / ".venvs" / "dy-cli" / "bin" / "dy"),
+)
 
 # MediaCrawler 串行锁
 _MC_LOCK = threading.Lock()

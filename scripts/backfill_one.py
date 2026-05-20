@@ -1,9 +1,10 @@
 """One-shot backfill: read transcript from an existing Feishu doc, POST to /rewrite."""
 import os, sys, re, json, urllib.request, pathlib
-sys.path.insert(0, "/Users/zhaoliang/Documents/GitHub/AI-Media2Doc")
+PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from dotenv import load_dotenv
-load_dotenv("/Users/zhaoliang/Documents/GitHub/AI-Media2Doc/.env")
+load_dotenv(str(PROJECT_ROOT / ".env"))
 
 from src.handlers.feishu_client import client
 from lark_oapi.api.docx.v1 import RawContentDocumentRequest
@@ -56,4 +57,4 @@ with urllib.request.urlopen(req_http, timeout=10) as r:
     print(f"  HTTP {r.status} {r.read().decode()}")
 
 print("\n[3/3] 已提交。查看 Mac PM2 日志观察 Claude CLI 进度：")
-print("  tail -f /Users/zhaoliang/.pm2/logs/ai-media2doc-out.log")
+print(f"  tail -f {pathlib.Path.home() / '.pm2' / 'logs' / 'ai-media2doc-out.log'}")
