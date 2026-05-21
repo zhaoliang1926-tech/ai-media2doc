@@ -12,8 +12,6 @@
     "config/prompts.yaml",
     ".env.example",
     "README.md",
-    "Dockerfile",
-    "docker-compose.yml",
     "requirements.txt",
     "claude_server.py",
     "poller.py",

@@ -197,6 +197,15 @@ def on_message(data: P2ImMessageReceiveV1):
             return
         _processed_message_ids.add(message.message_id)
 
+        # 收消息时再次校验凭证（防 .env 中途改但 daemon 没重启）
+        # daemon 启动时 graceful 检测已挡住完全未填情况；这里补"daemon 起来后凭证被清空"场景
+        missing_req, missing_opt = check_credentials()
+        if missing_req:
+            from src.handlers.message import send_text
+            send_text(message.chat_id, _format_missing_for_feishu(missing_req, missing_opt))
+            logger.warning(f"[on_message] 凭证未配置完整 ({len(missing_req)} 缺)，已飞书回执")
+            return
+
         parsed = {
             "chat_id": message.chat_id,
             "message_id": message.message_id,
@@ -381,18 +390,67 @@ def _is_placeholder(v: str) -> bool:
     return False
 
 
+# 全量凭证清单（key, 中文说明, 获取地址）
+REQUIRED_CREDS = [
+    ("FEISHU_APP_ID",            "飞书应用 ID",                       "open.feishu.cn → 自建应用 → 基本信息"),
+    ("FEISHU_APP_SECRET",        "飞书应用密钥",                       "同上"),
+    ("FEISHU_BITABLE_APP_TOKEN", "多维表格 App Token（存档索引）",       "多维表格 URL: ...base/<这一段>"),
+    ("FEISHU_BITABLE_TABLE_ID",  "多维表格 Table ID",                  "多维表格 URL: ...table=<这一段>"),
+    ("FEISHU_FOLDER_TOKEN",      "飞书云盘文件夹 Token（文档存放）",     "云盘文件夹 URL: .../folder/<这一段>"),
+    ("DASHSCOPE_API_KEY",        "阿里百炼 API Key（ASR + Qwen 改写）", "bailian.aliyun.com → API Keys"),
+]
+OPTIONAL_CREDS = [
+    ("CLAUDE_API_KEY",           "Claude API（1 号小助理改写，可选）",   "console.anthropic.com"),
+]
+
+
+def check_credentials():
+    """返回 (missing_required, missing_optional) 两个列表"""
+    missing_req = [(k, d, u) for k, d, u in REQUIRED_CREDS if _is_placeholder(os.getenv(k, ""))]
+    missing_opt = [(k, d, u) for k, d, u in OPTIONAL_CREDS if _is_placeholder(os.getenv(k, ""))]
+    return missing_req, missing_opt
+
+
+def _format_missing_for_feishu(missing_req, missing_opt) -> str:
+    """组装飞书友好回执文本"""
+    lines = ["⚠️ AI-Media2Doc 未配置完整，无法处理请求", ""]
+    lines.append(f"请先在 ~/ai-media2doc/.env 填以下 {len(missing_req)} 个必填凭证：")
+    lines.append("")
+    for k, desc, url in missing_req:
+        lines.append(f"• {k}")
+        lines.append(f"  {desc}")
+        lines.append(f"  获取: {url}")
+        lines.append("")
+    if missing_opt:
+        lines.append(f"以下 {len(missing_opt)} 个可选凭证未填（功能降级，但不阻塞）：")
+        for k, desc, _u in missing_opt:
+            lines.append(f"  · {k}: {desc}")
+        lines.append("")
+    lines.append("填好后跑：pm2 restart ai-media2doc-main")
+    return "\n".join(lines)
+
+
 def main():
     logger.info("启动 AI-Media2Doc 服务...")
     logger.info(f"飞书 App ID：{APP_ID}")
 
     # graceful fallback：占位 / 空凭证不进 ws.start（避免死循环 pm2 unstable restart）
     # 朋友填好 .env 后 `pm2 restart ai-media2doc-main` 立即激活
-    if _is_placeholder(APP_ID) or _is_placeholder(APP_SECRET):
-        logger.warning("=" * 60)
-        logger.warning("FEISHU_APP_ID / FEISHU_APP_SECRET 未填（.env 占位值）")
-        logger.warning("Daemon 保持 online 但不连飞书 WebSocket")
+    missing_req, missing_opt = check_credentials()
+    if missing_req:
+        logger.warning("=" * 70)
+        logger.warning(f"⚠️ 缺以下 {len(missing_req)} 个必填凭证, Daemon 保持 online 但不连飞书:")
+        for k, desc, url in missing_req:
+            logger.warning(f"  · {k:30s} {desc}")
+            logger.warning(f"    获取: {url}")
+        if missing_opt:
+            logger.info("")
+            logger.info(f"ℹ️  以下 {len(missing_opt)} 个可选凭证未填（不阻塞）：")
+            for k, desc, _url in missing_opt:
+                logger.info(f"  · {k}: {desc}")
+        logger.warning("=" * 70)
         logger.warning("填好 .env 后: pm2 restart ai-media2doc-main 即激活")
-        logger.warning("=" * 60)
+        logger.warning("=" * 70)
         import time
         while True:
             time.sleep(60)
