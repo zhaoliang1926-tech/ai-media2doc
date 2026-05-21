@@ -41,6 +41,7 @@ module.exports = {
       name: 'ai-media2doc-main',
       script: 'src/main.py',
       interpreter: 'python3',
+      namespace: 'ai-media2doc',
       cwd: PROJECT_ROOT,
 
       // ─── 日志 ──────────────────────────────────────────
