@@ -1,3 +1,5 @@
+from __future__ import annotations  # PEP 563/604: 让 dict|None 在 py 3.9 也能跑
+
 import os
 from datetime import datetime
 from lark_oapi.api.bitable.v1 import *
