@@ -38,7 +38,12 @@
     ".claude/**",
     "external/**",
     "dist/**",
-    "build/**"
+    "build/**",
+    "ops/cache/**",
+    "*.bak",
+    "*.bak-*",
+    "**/*.bak",
+    "**/*.bak-*"
   ],
   "preserve": [
     ".env",
