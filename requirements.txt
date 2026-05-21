@@ -5,7 +5,10 @@ lark-oapi==1.6.4
 
 # 抖音下载（内置签名，解决抖音反爬）
 # 注意：需要 Python 3.10+（douyin-downloader 使用了 3.10+ 语法）
-git+https://github.com/jiji262/douyin-downloader.git@0109645fe07d3fc0354920ee2ec546bc709a9020
+# ⚠️ 朋友机器（中国大陆）DNS 解析 github.com 失败 → git clone 必挂 → install rollback
+#    暂时注释，朋友想用抖音下载时手工:
+#    pip install --user git+https://github.com/jiji262/douyin-downloader.git@0109645fe07d3fc0354920ee2ec546bc709a9020
+# git+https://github.com/jiji262/douyin-downloader.git@0109645fe07d3fc0354920ee2ec546bc709a9020
 # yt-dlp 用于 cookies 提取（DOUYIN_COOKIES_BROWSER 模式）
 yt-dlp>=2025.1.1
 aiohttp>=3.9.0
